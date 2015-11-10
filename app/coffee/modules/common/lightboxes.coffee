@@ -344,13 +344,13 @@ CreateEditUserstoryDirective = ($repo, $model, $rs, $rootScope, lightboxService,
 
         createAttachments = (obj) ->
             promises = _.map attachmentsToAdd.toJS(), (attachment) ->
-                attachmentsService.uploadUSAttachment(attachment.file, obj)
+                attachmentsService.upload(attachment.file, obj.id, $scope.us.project, 'us')
 
             return $q.all(promises)
 
         deleteAttachments = (obj) ->
             promises = _.map attachmentsToDelete.toJS(), (attachment) ->
-                attachmentsService.delete(attachment, "us")
+                return attachmentsService.delete("us", attachment.id)
 
             return $q.all(promises)
 

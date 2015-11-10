@@ -6,7 +6,8 @@ AttachmentDirective = () ->
         bindToController: {
             attachment: "=",
             onDelete: "&",
-            onUpdate: "&"
+            onUpdate: "&",
+            type: "="
         },
         controller: "Attachment",
         controllerAs: "vm",

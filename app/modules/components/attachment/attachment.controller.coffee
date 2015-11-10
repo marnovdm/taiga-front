@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-# File: attchment.controller.spec.coffee
+# File: attchment.controller.coffee
 ###
 
 class AttachmentController
@@ -25,32 +25,35 @@ class AttachmentController
 
     constructor: (@attachmentsService, @translate) ->
         @.form = {}
-        @.form.description = @.attachment.get('description')
-        @.form.is_deprecated = @.attachment.get('is_deprecated')
+        @.form.description = @.attachment.getIn(['file', 'description'])
+        @.form.is_deprecated = @.attachment.get(['file', 'is_deprecated'])
+
+        @.loading = false
 
         @.title = @translate.instant("ATTACHMENT.TITLE", {
-                            fileName: @.attachment.get('name'),
-                            date: moment(@.attachment.get('created_date')).format(@translate.instant("ATTACHMENT.DATE"))
-                        })
+            fileName: @.attachment.get('name'),
+            date: moment(@.attachment.get('created_date')).format(@translate.instant("ATTACHMENT.DATE"))
+        })
 
     editMode: (mode) ->
         @.attachment = @.attachment.set('editable', mode)
 
     delete: () ->
-        @.onDelete({attachment: @.attachment}) if @.onDelete
+        @.onDelete({attachment: @.attachment})
 
     save: () ->
-        attachment = @.attachment.set('editable', false)
+        @.attachment = @.attachment.set('loading', true)
 
-        attachment = attachment.mergeIn(['file'], {
-            'description': @.form.description,
-            'is_deprecated': !!@.form.is_deprecated
+        attachment = @.attachment.merge({
+            editable: false,
+            loading: false
         })
 
+        attachment = attachment.mergeIn(['file'], {
+            description: @.form.description,
+            is_deprecated: !!@.form.is_deprecated
+        })
 
-        if @.onUpdate
-            @.onUpdate({attachment: attachment}).then (attachment) -> @.attachment = attachment
-        else
-            @.attachment = attachment
+        @.onUpdate({attachment: attachment})
 
 angular.module('taigaComponents').controller('Attachment', AttachmentController)

@@ -198,17 +198,12 @@ isImage = (name) ->
 patch = (oldImmutable, newImmutable) ->
     pathObj = {}
 
-    console.log newImmutable.toJS()
-    console.log oldImmutable.toJS()
-
     newImmutable.forEach (newValue, key) ->
         if newValue != oldImmutable.get(key)
             if newValue.toJS
                 pathObj[key] = newValue.toJS()
             else
                 pathObj[key] = newValue
-
-    console.log pathObj
 
     return pathObj
 

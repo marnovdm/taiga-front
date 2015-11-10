@@ -19,13 +19,10 @@
 
 class AttachmentsController
     @.$inject = [
-        "tgAttachmentsService",
-        "$rootScope"
+        "tgAttachmentsService"
     ]
 
-    constructor: (@attachmentsService, @rootScope) ->
-        @.maxFileSize = @attachmentsService.maxFileSize
-        @.maxFileSizeFormated = @attachmentsService.maxFileSizeFormated
+    constructor: (@attachmentsService) ->
 
     addAttachment: (file) ->
         attachment = Immutable.fromJS({
@@ -37,8 +34,7 @@ class AttachmentsController
         if @attachmentsService.validate(file)
             @.attachments = @.attachments.push(attachment)
 
-            if @.onAdd
-                @.onAdd({attachment: attachment})
+            @.onAdd({attachment: attachment}) if @.onAdd
 
     addAttachments: (files) ->
         _.forEach files, @.addAttachment.bind(this)
@@ -46,8 +42,7 @@ class AttachmentsController
     deleteAttachment: (toDeleteAttachment) ->
         @.attachments = @.attachments.filter (attachment) -> attachment != toDeleteAttachment
 
-        if @.onDelete
-            @.onDelete({attachment: toDeleteAttachment})
+        @.onDelete({attachment: toDeleteAttachment}) if @.onDelete
 
 angular.module("taigaComponents").controller("Attachments", AttachmentsController)
 
@@ -55,13 +50,13 @@ angular.module("taigaComponents").controller("Attachments", AttachmentsControlle
 class AttachmentsController2
     @.$inject = [
         "tgAttachmentsService",
-        "$rootScope"
+        "$rootScope",
+        "$translate",
+        "$tgConfirm"
     ]
 
-    constructor: (@attachmentsService, @rootScope) ->
+    constructor: (@attachmentsService, @rootScope, @translate, @confirm) ->
         @.deprecatedsVisible = false
-        @.maxFileSize = @attachmentsService.maxFileSize
-        @.maxFileSizeFormated = @attachmentsService.maxFileSizeFormated
         @.uploadingAttachments = []
 
     loadAttachments: ->
@@ -70,6 +65,7 @@ class AttachmentsController2
                 attachment = Immutable.Map()
 
                 return attachment.merge({
+                    loading: false,
                     editable: false,
                     file: file
                 })
@@ -93,8 +89,11 @@ class AttachmentsController2
 
                 attachment = Immutable.Map()
 
-                attachment = attachment.set('file', file)
-                attachment = attachment.set('editable', true)
+                attachment = attachment.merge({
+                    file: file,
+                    editable: true,
+                    loading: false
+                })
 
                 @.attachments = @.attachments.push(attachment)
 
@@ -104,42 +103,50 @@ class AttachmentsController2
         _.forEach files, @.addAttachment.bind(this)
 
     deleteAttachment: (toDeleteAttachment) ->
-        @attachmentsService.delete(@.type, toDeleteAttachment.get('id')).then () ->
-            @.attachments = @.attachments.filter (attachment) -> attachment != toDeleteAttachment
+        title = @translate.instant("ATTACHMENT.TITLE_LIGHTBOX_DELETE_ATTACHMENT")
+        message = @translate.instant("ATTACHMENT.MSG_LIGHTBOX_DELETE_ATTACHMENT", {
+            fileName: toDeleteAttachment.getIn(['file', 'name'])
+        })
+
+        return @confirm.askOnDelete(title, message)
+            .then (askResponse) =>
+                onError = () =>
+                    message = @translate.instant("ATTACHMENT.ERROR_DELETE_ATTACHMENT", {errorMessage: message})
+                    @confirm.notify("error", null, message)
+
+                    askResponse.finish(false)
+
+                onSuccess = () =>
+                    @.attachments = @.attachments.filter (attachment) -> attachment != toDeleteAttachment
+
+                    askResponse.finish()
+
+                return @attachmentsService.delete(@.type, toDeleteAttachment.getIn(['file', 'id'])).then(onSuccess, onError)
 
     reorderAttachment: (attachment, newIndex) ->
         oldIndex = @.attachments.findIndex (it) -> it == attachment
         return if oldIndex == newIndex
 
-        @.attachments = @.attachments.remove(oldIndex)
-        @.attachments = @.attachments.splice(newIndex, 0, attachment)
+        attachments = @.attachments.remove(oldIndex)
+        attachments = attachments.splice(newIndex, 0, attachment)
+        attachments = attachments.map (x, i) -> x.setIn(['file', 'order'], i + 1)
 
-        @.attachments = @.attachments.map (x, i) -> x.set('order', i + 1)
+        promises = attachments.map (attachment) =>
+            patch = {order: attachment.getIn(['file', 'order'])}
 
-    # updateAttachment: (toUpdateAttachment) ->
-    #     index = @.attachments.findIndex (attachment) ->
-    #         return attachment.get('id') == toUpdateAttachment.get('id')
+            return @attachmentsService.patch(attachment.getIn(['file', 'id']), @.type, patch)
 
-    #     @.attachments = @.attachments.update index, () -> toUpdateAttachment
+        return Promise.all(promises.toJS()).then () => @.attachments = attachments
 
     updateAttachment: (toUpdateAttachment) ->
         index = @.attachments.findIndex (attachment) ->
-            return attachment.get('id') == toUpdateAttachment.get('id')
+            return attachment.getIn(['file', 'id']) == toUpdateAttachment.getIn(['file', 'id'])
 
         oldAttachment = @.attachments.get(index)
 
         patch = taiga.patch(oldAttachment.get('file'), toUpdateAttachment.get('file'))
 
-        onSuccess = =>
-            @.updateCounters()
-            @rootScope.$broadcast("attachment:edit")
-
-        onError = (response) =>
-            $scope.$emit("attachments:size-error") if response.status == 413
-            @confirm.notify("error")
-            return @q.reject()
-
-        return @attachmentsService.patch(toUpdateAttachment.getIn(['file', 'id']), @.type, patch)
-            .then(onSuccess, onError)
+        return @attachmentsService.patch(toUpdateAttachment.getIn(['file', 'id']), @.type, patch).then () =>
+            @.attachments = @.attachments.set(index, toUpdateAttachment)
 
 angular.module("taigaComponents").controller("Attachments2", AttachmentsController2)

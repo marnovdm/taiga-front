@@ -5,11 +5,10 @@ class AttachmentsService
         "$tgConfirm",
         "$tgConfig",
         "$translate",
-        "$q",
         "tgResources"
     ]
 
-    constructor: (@confirm, @config, @translate, @q, @rs) ->
+    constructor: (@confirm, @config, @translate, @rs) ->
         @.maxFileSize = @.getMaxFileSize()
 
         if @.maxFileSize
@@ -39,26 +38,32 @@ class AttachmentsService
         return @rs.attachments.list(type, objId, projectId).then (attachments) =>
             return attachments.sortBy (attachment) => attachment.get('order')
 
-    delete: (attachment, type) ->
-        return @rs.attachments.delete(type, attachment.get('id'))
+    delete: (type, id) ->
+        return @rs.attachments.delete(type, id)
+
+    saveError: (data) ->
+        if data.status == 413
+            @.sizeError(file)
+
+            message = @translate.instant("ATTACHMENT.ERROR_UPLOAD_ATTACHMENT", {
+                        fileName: file.get('name'), errorMessage: data.data._error_message})
+
+            @confirm.notify("error", message)
+        else
+            @confirm.notify("error", message)
 
     upload: (file, objId, projectId, type) ->
         promise = @rs.attachments.create(type, projectId, objId, file)
 
-        promise.then null, (data) =>
-            if data.status == 413
-                @.sizeError(file)
-
-                message = @translate.instant("ATTACHMENT.ERROR_UPLOAD_ATTACHMENT", {
-                            fileName: file.get('name'), errorMessage: data.data._error_message})
-
-                @confirm.notify("error", message)
-
-                return @q.reject(data)
+        promise.then null, @.saveError.bind(this)
 
         return promise
 
     patch: (id, type, patch) ->
-        return @rs.attachments.patch(type, id, patch)
+        promise = @rs.attachments.patch(type, id, patch)
+
+        promise.then null, @.saveError.bind(this)
+
+        return promise
 
 angular.module("taigaCommon").service("tgAttachmentsService", AttachmentsService)
